@@ -524,6 +524,14 @@
       <div class="stat-label">Avg fat</div>
       <div class="stat-value mono"><span id="statAvgF">0</span><span class="stat-unit">g</span></div>
     </div>
+    <div class="stat-card">
+      <div class="stat-label">Avg water</div>
+      <div class="stat-value mono"><span id="statAvgWater">0</span><span class="stat-unit">ml</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Today water</div>
+      <div class="stat-value mono"><span id="statTodayWater">0</span><span class="stat-unit">ml</span></div>
+    </div>
   </div>
 
   <div class="tab-header" style="padding-top:8px"><div class="tab-sub">Recent days</div></div>
@@ -556,9 +564,6 @@
         <option value="claude-opus-4-7">Opus 4.7 (overkill)</option>
       </select>
     </div>
-    <div class="settings-help">
-      Get a key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>. Top up only $5 at a time, no auto-reload, that's your safety cap. Cost per estimate: Haiku ~$0.001, Sonnet ~$0.003, Opus ~$0.005.
-    </div>
   </div>
 
   <div class="settings-section">
@@ -581,7 +586,7 @@
   <div class="settings-section">
     <h3>About</h3>
     <div class="settings-help">
-      Eat v2. All data lives on this device. No accounts, no servers, no tracking. Recipes stored once, edits don't change past logs.
+      Eat v2. Andrei's food tracker for better health
     </div>
   </div>
 </div>
@@ -613,7 +618,7 @@
     <div class="modal-handle"></div>
     <h2>What did you eat?</h2>
     <div class="modal-sub">Pick how you want to log it</div>
-    <div class="choice-row choice-row-3">
+    <div class="choice-row">
       <div class="choice-card" id="chooseLabel">
         <div class="choice-icon">L</div>
         <div class="choice-name">From label</div>
@@ -622,9 +627,15 @@
         <div class="choice-icon">R</div>
         <div class="choice-name">From recipe</div>
       </div>
+    </div>
+    <div class="choice-row">
       <div class="choice-card" id="chooseFresh">
         <div class="choice-icon">+</div>
         <div class="choice-name">One-off</div>
+      </div>
+      <div class="choice-card" id="chooseWater">
+        <div class="choice-icon">W</div>
+        <div class="choice-name">Water</div>
       </div>
     </div>
     <div class="btn-row">
@@ -642,6 +653,129 @@
     <div class="picker-list" id="recipePickerList"></div>
     <div class="btn-row">
       <button class="btn btn-ghost" data-close>Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Water -->
+<div class="modal-overlay" id="waterModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2>Water</h2>
+    <div class="modal-sub">How much did you drink?</div>
+    <div class="field">
+      <label>Amount (ml)</label>
+      <input type="number" id="waterAmount" inputmode="decimal" placeholder="e.g. 250">
+    </div>
+    <div class="choice-row choice-row-3" style="margin-top:-4px;margin-bottom:8px">
+      <div class="choice-card" data-water-quick="200" style="padding:10px"><div class="choice-name">200 ml</div></div>
+      <div class="choice-card" data-water-quick="330" style="padding:10px"><div class="choice-name">330 ml</div></div>
+      <div class="choice-card" data-water-quick="500" style="padding:10px"><div class="choice-name">500 ml</div></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" data-close>Cancel</button>
+      <button class="btn btn-primary" id="waterSaveBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit food entry -->
+<div class="modal-overlay" id="editEntryModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2>Edit entry</h2>
+    <div class="modal-sub" id="editEntrySub"></div>
+
+    <div class="field">
+      <label>Meal</label>
+      <select id="editMeal">
+        <option>Breakfast</option><option>Lunch</option>
+        <option>Dinner</option><option>Snacks</option>
+      </select>
+    </div>
+
+    <!-- Recipe-source: edit portions -->
+    <div id="editRecipeFields" style="display:none">
+      <div class="field">
+        <label>Portions eaten</label>
+        <div class="portion-stepper">
+          <button id="editPortionMinus">−</button>
+          <input type="number" id="editPortionInput" step="0.1" inputmode="decimal">
+          <button id="editPortionPlus">+</button>
+        </div>
+      </div>
+      <div class="estimate" id="editPortionEstimate"></div>
+    </div>
+
+    <!-- Label-source: edit amount -->
+    <div id="editLabelFields" style="display:none">
+      <div class="field">
+        <label>Amount</label>
+        <div class="field-row">
+          <div><input type="number" id="editLblAmount" inputmode="decimal"></div>
+          <div>
+            <select id="editLblUnit">
+              <option value="g">grams</option>
+              <option value="ml">millilitres</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="estimate" id="editLabelEstimate"></div>
+    </div>
+
+    <!-- Fresh / one-off / generic: edit raw values -->
+    <div id="editFreshFields" style="display:none">
+      <div class="field">
+        <label>Name</label>
+        <input type="text" id="editName">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Calories (kcal)</label>
+          <input type="number" id="editCal" inputmode="decimal">
+        </div>
+        <div class="field">
+          <label>Protein (g)</label>
+          <input type="number" id="editP" inputmode="decimal">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Carbs (g)</label>
+          <input type="number" id="editC" inputmode="decimal">
+        </div>
+        <div class="field">
+          <label>Fat (g)</label>
+          <input type="number" id="editF" inputmode="decimal">
+        </div>
+      </div>
+    </div>
+
+    <!-- Water: edit amount only -->
+    <div id="editWaterFields" style="display:none">
+      <div class="field">
+        <label>Amount (ml)</label>
+        <input type="number" id="editWaterAmount" inputmode="decimal">
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-ghost" data-close>Cancel</button>
+      <button class="btn btn-primary" id="editSaveBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm dialog (for deletes) -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2 id="confirmTitle">Are you sure?</h2>
+    <div class="modal-sub" id="confirmSub"></div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" id="confirmNo">Cancel</button>
+      <button class="btn btn-danger" id="confirmYes">Delete</button>
     </div>
   </div>
 </div>
@@ -872,6 +1006,7 @@ const STORAGE = {
   recipes: 'eat_recipes_v2',
   apiKey: 'eat_api_key_v2',
   model: 'eat_model_v2',
+  water: 'eat_water_v2',
 };
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 
@@ -892,6 +1027,8 @@ function loadJSON(key, fallback) {
 function saveJSON(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
 function loadLog() { return loadJSON(STORAGE.log, {}); }
 function saveLog(l) { saveJSON(STORAGE.log, l); }
+function loadWater() { return loadJSON(STORAGE.water, {}); }
+function saveWater(w) { saveJSON(STORAGE.water, w); }
 function loadRecipes() { return loadJSON(STORAGE.recipes, []); }
 function saveRecipes(r) { saveJSON(STORAGE.recipes, r); }
 function getApiKey() { return localStorage.getItem(STORAGE.apiKey) || ''; }
@@ -971,7 +1108,7 @@ function renderToday() {
       (items.length === 0
         ? '<div class="empty-meal">nothing logged</div>'
         : '<div class="meal-items">' + items.map((it, idx) =>
-            `<div class="item">
+            `<div class="item" data-meal="${m}" data-idx="${idx}" style="cursor:pointer">
               <div class="item-info">
                 <div class="item-name">${escapeHtml(it.name)}</div>
                 <div class="item-detail">${escapeHtml(it.detail || '')}</div>
@@ -989,12 +1126,26 @@ function renderToday() {
   document.getElementById('totalF').textContent = Math.round(totalF);
 
   container.querySelectorAll('.item-delete').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
       const log = loadLog(); const k = dateKey(currentDate);
-      if (log[k] && log[k][btn.dataset.meal]) {
-        log[k][btn.dataset.meal].splice(parseInt(btn.dataset.idx), 1);
-        saveLog(log); renderToday();
-      }
+      const meal = btn.dataset.meal;
+      const idx = parseInt(btn.dataset.idx);
+      if (!(log[k] && log[k][meal] && log[k][meal][idx])) return;
+      const item = log[k][meal][idx];
+      const ok = await confirmDialog({
+        title: 'Delete this entry?',
+        message: `${item.name} (${Math.round(item.calories)} kcal) will be removed.`,
+      });
+      if (!ok) return;
+      log[k][meal].splice(idx, 1);
+      saveLog(log); renderToday();
+    });
+  });
+
+  container.querySelectorAll('.item[data-meal]').forEach(row => {
+    row.addEventListener('click', () => {
+      openEditEntry(row.dataset.meal, parseInt(row.dataset.idx));
     });
   });
 }
@@ -1063,10 +1214,15 @@ function openRecipeDetail(id) {
   openModal('recipeDetailModal');
 }
 
-document.getElementById('rdDelete').addEventListener('click', () => {
+document.getElementById('rdDelete').addEventListener('click', async () => {
   if (!activeRecipeId) return;
-  if (!confirm('Delete this recipe? Past logs are not affected.')) return;
-  const recipes = loadRecipes().filter(r => r.id !== activeRecipeId);
+  const r = loadRecipes().find(x => x.id === activeRecipeId);
+  const ok = await confirmDialog({
+    title: 'Delete this recipe?',
+    message: `${r?.name || 'Recipe'} will be removed. Past logs are not affected.`,
+  });
+  if (!ok) return;
+  const recipes = loadRecipes().filter(rec => rec.id !== activeRecipeId);
   saveRecipes(recipes);
   closeAllModals();
   renderRecipes();
@@ -1084,6 +1240,7 @@ document.getElementById('rdLog').addEventListener('click', () => {
 // ============================================================
 function renderHistory() {
   const log = loadLog();
+  const water = loadWater();
   const days = [];
   const today = new Date(); today.setHours(0,0,0,0);
   for (let i = 29; i >= 0; i--) {
@@ -1096,27 +1253,34 @@ function renderHistory() {
       cal += item.calories || 0; p += item.protein || 0;
       c += item.carbs || 0; f += item.fat || 0;
     }));
-    days.push({ date: d, key: k, cal, p, c, f, hasData: cal > 0 });
+    const waterEntries = water[k] || [];
+    const ml = waterEntries.reduce((s, w) => s + (w.ml || 0), 0);
+    days.push({ date: d, key: k, cal, p, c, f, ml, hasData: cal > 0 || ml > 0 });
   }
 
   // Chart
   const maxCal = Math.max(...days.map(d => d.cal), 1);
   const chart = document.getElementById('chart');
   chart.innerHTML = days.map(d => `
-    <div class="bar ${d.hasData ? 'has-data' : ''}"
+    <div class="bar ${d.cal > 0 ? 'has-data' : ''}"
          style="height:${(d.cal / maxCal * 100)}%"
          data-tooltip="${fmtDateLabel(d.date)}: ${Math.round(d.cal)} kcal"></div>
   `).join('');
 
-  // Stats (only count days with data)
-  const dataD = days.filter(d => d.hasData);
-  const avg = (key) => dataD.length ? dataD.reduce((s, d) => s + d[key], 0) / dataD.length : 0;
-  document.getElementById('statAvgCal').textContent = Math.round(avg('cal'));
-  document.getElementById('statDays').textContent = dataD.length;
-  document.getElementById('statAvgP').textContent = Math.round(avg('p'));
-  document.getElementById('statAvgF').textContent = Math.round(avg('f'));
+  // Stats (only count days with food data for food avgs; water avg uses days with water)
+  const foodDays = days.filter(d => d.cal > 0);
+  const waterDays = days.filter(d => d.ml > 0);
+  const avgFood = (key) => foodDays.length ? foodDays.reduce((s, d) => s + d[key], 0) / foodDays.length : 0;
+  const avgWater = waterDays.length ? waterDays.reduce((s, d) => s + d.ml, 0) / waterDays.length : 0;
+  document.getElementById('statAvgCal').textContent = Math.round(avgFood('cal'));
+  document.getElementById('statDays').textContent = foodDays.length;
+  document.getElementById('statAvgP').textContent = Math.round(avgFood('p'));
+  document.getElementById('statAvgF').textContent = Math.round(avgFood('f'));
+  document.getElementById('statAvgWater').textContent = Math.round(avgWater);
+  const todayWaterMl = days[days.length - 1]?.ml || 0;
+  document.getElementById('statTodayWater').textContent = Math.round(todayWaterMl);
 
-  // Day list (most recent with data first)
+  // Day list (most recent with any data first)
   const list = document.getElementById('dayHistoryList');
   const recent = [...days].reverse().filter(d => d.hasData).slice(0, 14);
   if (recent.length === 0) {
@@ -1125,7 +1289,7 @@ function renderHistory() {
     list.innerHTML = recent.map(d => `
       <div class="day-row" data-date="${d.key}">
         <div class="day-row-date">${fmtDateLabel(d.date)}</div>
-        <div class="day-row-cals mono">${Math.round(d.cal)} kcal</div>
+        <div class="day-row-cals mono">${Math.round(d.cal)} kcal${d.ml ? ' · ' + Math.round(d.ml) + 'ml' : ''}</div>
       </div>
     `).join('');
     list.querySelectorAll('.day-row').forEach(row => {
@@ -1159,9 +1323,49 @@ function openDayDetail(key) {
     });
     html += '</div>';
   });
+
+  // Water section
+  const waterEntries = (loadWater()[key]) || [];
+  const totalMl = waterEntries.reduce((s, w) => s + (w.ml || 0), 0);
+  if (totalMl > 0) {
+    html += `<div style="margin-top:14px">
+      <div style="color:var(--accent);font-style:italic;font-size:15px;margin-bottom:6px">
+        Water · <span style="color:var(--text-dim);font-style:normal" class="mono">${Math.round(totalMl)} ml</span>
+      </div>`;
+    waterEntries.forEach((w, idx) => {
+      const t = new Date(w.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;gap:12px">
+        <span>${t}</span>
+        <span class="mono" style="color:var(--text-dim);flex:1;text-align:right">${Math.round(w.ml)} ml</span>
+        <button class="item-delete water-delete" data-key="${key}" data-idx="${idx}" style="padding:0 6px">×</button>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
   document.getElementById('ddTotals').innerHTML =
-    `<span class="mono">${Math.round(cal)} kcal</span> · ${Math.round(p)}g P · ${Math.round(c)}g C · ${Math.round(f)}g F`;
+    `<span class="mono">${Math.round(cal)} kcal</span> · ${Math.round(p)}g P · ${Math.round(c)}g C · ${Math.round(f)}g F${totalMl > 0 ? ' · ' + Math.round(totalMl) + 'ml water' : ''}`;
   document.getElementById('ddMeals').innerHTML = html || '<div style="color:var(--text-dim)">no meals</div>';
+
+  document.querySelectorAll('#ddMeals .water-delete').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const k = btn.dataset.key;
+      const idx = parseInt(btn.dataset.idx);
+      const water = loadWater();
+      if (!water[k] || !water[k][idx]) return;
+      const entry = water[k][idx];
+      const ok = await confirmDialog({
+        title: 'Delete this water entry?',
+        message: `${Math.round(entry.ml)} ml will be removed.`,
+      });
+      if (!ok) return;
+      water[k].splice(idx, 1);
+      saveWater(water);
+      openDayDetail(k); // re-render the day
+      renderHistory();
+    });
+  });
   openModal('dayDetailModal');
 }
 
@@ -1207,6 +1411,7 @@ document.getElementById('exportBtn').addEventListener('click', () => {
     version: 2,
     log: loadLog(),
     recipes: loadRecipes(),
+    water: loadWater(),
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -1226,9 +1431,15 @@ document.getElementById('importFile').addEventListener('change', async (e) => {
   try {
     const text = await file.text();
     const data = JSON.parse(text);
-    if (!confirm('Replace current data with backup? Cannot be undone.')) return;
+    const ok = await confirmDialog({
+      title: 'Replace current data?',
+      message: 'Your current logs and recipes will be overwritten. Cannot be undone.',
+      confirmText: 'Replace',
+    });
+    if (!ok) return;
     if (data.log) saveLog(data.log);
     if (data.recipes) saveRecipes(data.recipes);
+    if (data.water) saveWater(data.water);
     alert('Imported successfully');
     renderToday(); renderRecipes();
   } catch (err) {
@@ -1236,11 +1447,22 @@ document.getElementById('importFile').addEventListener('change', async (e) => {
   }
 });
 
-document.getElementById('clearBtn').addEventListener('click', () => {
-  if (!confirm('Erase all logs and recipes? This cannot be undone.')) return;
-  if (!confirm('Really sure? Export a backup first if you want to keep anything.')) return;
+document.getElementById('clearBtn').addEventListener('click', async () => {
+  const ok1 = await confirmDialog({
+    title: 'Erase everything?',
+    message: 'All logs, recipes, and water entries will be permanently deleted.',
+    confirmText: 'Erase',
+  });
+  if (!ok1) return;
+  const ok2 = await confirmDialog({
+    title: 'Really sure?',
+    message: 'Export a backup first if you want to keep anything.',
+    confirmText: 'Erase forever',
+  });
+  if (!ok2) return;
   localStorage.removeItem(STORAGE.log);
   localStorage.removeItem(STORAGE.recipes);
+  localStorage.removeItem(STORAGE.water);
   renderToday(); renderRecipes();
   alert('Erased');
 });
@@ -1258,6 +1480,26 @@ document.querySelectorAll('[data-close]').forEach(b => {
 document.querySelectorAll('.modal-overlay').forEach(m => {
   m.addEventListener('click', (e) => { if (e.target === m) closeAllModals(); });
 });
+
+// Confirm dialog helper. Returns a Promise<boolean>.
+function confirmDialog(opts) {
+  return new Promise(resolve => {
+    document.getElementById('confirmTitle').textContent = opts.title || 'Are you sure?';
+    document.getElementById('confirmSub').textContent = opts.message || '';
+    const yesBtn = document.getElementById('confirmYes');
+    const noBtn = document.getElementById('confirmNo');
+    yesBtn.textContent = opts.confirmText || 'Delete';
+    noBtn.textContent = opts.cancelText || 'Cancel';
+    const cleanup = () => {
+      yesBtn.replaceWith(yesBtn.cloneNode(true));
+      noBtn.replaceWith(noBtn.cloneNode(true));
+      closeAllModals();
+    };
+    document.getElementById('confirmYes').addEventListener('click', () => { cleanup(); resolve(true); }, { once: true });
+    document.getElementById('confirmNo').addEventListener('click', () => { cleanup(); resolve(false); }, { once: true });
+    openModal('confirmModal');
+  });
+}
 
 // ============================================================
 // FAB → choice modal
@@ -1305,6 +1547,210 @@ document.getElementById('chooseFresh').addEventListener('click', () => {
 document.getElementById('chooseLabel').addEventListener('click', () => {
   closeAllModals();
   openLabelModal();
+});
+document.getElementById('chooseWater').addEventListener('click', () => {
+  closeAllModals();
+  openWaterModal();
+});
+
+// ============================================================
+// WATER
+// ============================================================
+function openWaterModal() {
+  document.getElementById('waterAmount').value = '';
+  openModal('waterModal');
+  setTimeout(() => document.getElementById('waterAmount').focus(), 100);
+}
+document.querySelectorAll('[data-water-quick]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('waterAmount').value = btn.dataset.waterQuick;
+  });
+});
+document.getElementById('waterSaveBtn').addEventListener('click', () => {
+  const amt = parseFloat(document.getElementById('waterAmount').value);
+  if (!amt || amt <= 0) { alert('Enter how much you drank in ml'); return; }
+  const water = loadWater();
+  const k = dateKey(currentDate);
+  if (!water[k]) water[k] = [];
+  water[k].push({ ml: amt, timestamp: Date.now() });
+  saveWater(water);
+  closeAllModals();
+  switchTab('today');
+});
+
+// ============================================================
+// EDIT ENTRY
+// ============================================================
+let editContext = null; // { meal, idx, item }
+
+function openEditEntry(meal, idx) {
+  const log = loadLog();
+  const k = dateKey(currentDate);
+  const item = log[k]?.[meal]?.[idx];
+  if (!item) return;
+  editContext = { meal, idx, item };
+
+  document.getElementById('editEntrySub').textContent = item.name;
+  document.getElementById('editMeal').value = meal;
+
+  // Hide all type-specific blocks first
+  document.getElementById('editRecipeFields').style.display = 'none';
+  document.getElementById('editLabelFields').style.display = 'none';
+  document.getElementById('editFreshFields').style.display = 'none';
+  document.getElementById('editWaterFields').style.display = 'none';
+
+  const type = item.source?.type;
+  if (type === 'recipe' && item.source.recipeId) {
+    // Show portion stepper, recipe is a snapshot so we use original perPortion if recipe still exists
+    const r = loadRecipes().find(x => x.id === item.source.recipeId);
+    // If recipe deleted, fall back to fresh fields
+    if (r) {
+      document.getElementById('editRecipeFields').style.display = 'block';
+      document.getElementById('editPortionInput').value = item.source.portions;
+      updateEditPortionEstimate(r);
+    } else {
+      // Recipe deleted, edit as raw values
+      showEditFreshFields(item);
+    }
+  } else if (type === 'label' && item.source.per100) {
+    document.getElementById('editLabelFields').style.display = 'block';
+    document.getElementById('editLblAmount').value = item.source.amount;
+    document.getElementById('editLblUnit').value = item.source.unit;
+    updateEditLabelEstimate();
+  } else {
+    // 'fresh' or anything unrecognised: edit raw values
+    showEditFreshFields(item);
+  }
+
+  openModal('editEntryModal');
+}
+
+function showEditFreshFields(item) {
+  document.getElementById('editFreshFields').style.display = 'block';
+  document.getElementById('editName').value = item.name;
+  document.getElementById('editCal').value = Math.round(item.calories);
+  document.getElementById('editP').value = Math.round(item.protein);
+  document.getElementById('editC').value = Math.round(item.carbs);
+  document.getElementById('editF').value = Math.round(item.fat);
+}
+
+function updateEditPortionEstimate(r) {
+  const p = parseFloat(document.getElementById('editPortionInput').value) || 0;
+  const cal = r.perPortion.calories * p;
+  const pr = r.perPortion.protein * p;
+  const c = r.perPortion.carbs * p;
+  const f = r.perPortion.fat * p;
+  document.getElementById('editPortionEstimate').innerHTML = `
+    <div class="estimate-title">New values</div>
+    <div class="estimate-row"><span>Calories</span><span class="v mono">${Math.round(cal)} kcal</span></div>
+    <div class="estimate-row"><span>Protein</span><span class="v mono">${Math.round(pr)} g</span></div>
+    <div class="estimate-row"><span>Carbs</span><span class="v mono">${Math.round(c)} g</span></div>
+    <div class="estimate-row"><span>Fat</span><span class="v mono">${Math.round(f)} g</span></div>
+  `;
+}
+
+document.getElementById('editPortionInput').addEventListener('input', () => {
+  if (!editContext) return;
+  const r = loadRecipes().find(x => x.id === editContext.item.source.recipeId);
+  if (r) updateEditPortionEstimate(r);
+});
+document.getElementById('editPortionMinus').addEventListener('click', () => {
+  const i = document.getElementById('editPortionInput');
+  i.value = Math.max(0.1, (parseFloat(i.value) || 0) - 0.5).toFixed(1);
+  if (editContext) {
+    const r = loadRecipes().find(x => x.id === editContext.item.source.recipeId);
+    if (r) updateEditPortionEstimate(r);
+  }
+});
+document.getElementById('editPortionPlus').addEventListener('click', () => {
+  const i = document.getElementById('editPortionInput');
+  i.value = ((parseFloat(i.value) || 0) + 0.5).toFixed(1);
+  if (editContext) {
+    const r = loadRecipes().find(x => x.id === editContext.item.source.recipeId);
+    if (r) updateEditPortionEstimate(r);
+  }
+});
+
+function updateEditLabelEstimate() {
+  if (!editContext || editContext.item.source?.type !== 'label') return;
+  const per = editContext.item.source.per100;
+  const amt = parseFloat(document.getElementById('editLblAmount').value);
+  if (!amt || amt <= 0) {
+    document.getElementById('editLabelEstimate').innerHTML = '';
+    return;
+  }
+  const f = amt / 100;
+  document.getElementById('editLabelEstimate').innerHTML = `
+    <div class="estimate-title">New values</div>
+    <div class="estimate-row"><span>Calories</span><span class="v mono">${Math.round(per.calories * f)} kcal</span></div>
+    <div class="estimate-row"><span>Protein</span><span class="v mono">${Math.round(per.protein * f)} g</span></div>
+    <div class="estimate-row"><span>Carbs</span><span class="v mono">${Math.round(per.carbs * f)} g</span></div>
+    <div class="estimate-row"><span>Fat</span><span class="v mono">${Math.round(per.fat * f)} g</span></div>
+  `;
+}
+['editLblAmount','editLblUnit'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updateEditLabelEstimate);
+  document.getElementById(id).addEventListener('change', updateEditLabelEstimate);
+});
+
+document.getElementById('editSaveBtn').addEventListener('click', () => {
+  if (!editContext) return;
+  const log = loadLog();
+  const k = dateKey(currentDate);
+  const newMeal = document.getElementById('editMeal').value;
+  const oldMeal = editContext.meal;
+  const oldIdx = editContext.idx;
+  const item = log[k][oldMeal][oldIdx];
+  if (!item) { closeAllModals(); return; }
+
+  const type = item.source?.type;
+  if (type === 'recipe' && document.getElementById('editRecipeFields').style.display !== 'none') {
+    const r = loadRecipes().find(x => x.id === item.source.recipeId);
+    if (r) {
+      const p = parseFloat(document.getElementById('editPortionInput').value) || 0;
+      if (p <= 0) { alert('Portions must be > 0'); return; }
+      item.calories = r.perPortion.calories * p;
+      item.protein = r.perPortion.protein * p;
+      item.carbs = r.perPortion.carbs * p;
+      item.fat = r.perPortion.fat * p;
+      item.detail = `${p} portion${p === 1 ? '' : 's'}`;
+      item.source.portions = p;
+    }
+  } else if (type === 'label' && document.getElementById('editLabelFields').style.display !== 'none') {
+    const amt = parseFloat(document.getElementById('editLblAmount').value);
+    const unit = document.getElementById('editLblUnit').value;
+    if (!amt || amt <= 0) { alert('Amount must be > 0'); return; }
+    const per = item.source.per100;
+    const f = amt / 100;
+    item.calories = per.calories * f;
+    item.protein = per.protein * f;
+    item.carbs = per.carbs * f;
+    item.fat = per.fat * f;
+    item.detail = `${amt}${unit} · ${per.calories} kcal/100${unit}`;
+    item.source.amount = amt;
+    item.source.unit = unit;
+  } else {
+    // Fresh fields
+    const name = document.getElementById('editName').value.trim();
+    if (!name) { alert('Name required'); return; }
+    item.name = name;
+    item.calories = parseFloat(document.getElementById('editCal').value) || 0;
+    item.protein = parseFloat(document.getElementById('editP').value) || 0;
+    item.carbs = parseFloat(document.getElementById('editC').value) || 0;
+    item.fat = parseFloat(document.getElementById('editF').value) || 0;
+  }
+
+  // Move between meals if needed
+  if (newMeal !== oldMeal) {
+    log[k][oldMeal].splice(oldIdx, 1);
+    if (!log[k][newMeal]) log[k][newMeal] = [];
+    log[k][newMeal].push(item);
+  } else {
+    log[k][oldMeal][oldIdx] = item;
+  }
+  saveLog(log);
+  closeAllModals();
+  renderToday();
 });
 
 // ============================================================
@@ -1597,7 +2043,7 @@ document.getElementById('estimateBtn').addEventListener('click', async () => {
   errorBox.innerHTML = '';
   estBox.style.display = 'block';
   estBox.querySelector('#foodEstimateContent').innerHTML =
-    '<div class="loading spin">Asking Claude...</div>';
+    '<div class="loading spin">Calculating...</div>';
   btn.disabled = true;
 
   try {
