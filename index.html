@@ -420,6 +420,7 @@
   .choice-row {
     display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0;
   }
+  .choice-row-3 { grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
   .choice-card {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 14px; padding: 20px 16px; text-align: center;
@@ -612,28 +613,18 @@
     <div class="modal-handle"></div>
     <h2>What did you eat?</h2>
     <div class="modal-sub">Pick how you want to log it</div>
-    <div class="choice-row">
-      <div class="choice-card" id="chooseRecipe">
-        <div class="choice-icon">R</div>
-        <div class="choice-name">From recipe</div>
-        <div class="choice-sub">instant, free</div>
-      </div>
+    <div class="choice-row choice-row-3">
       <div class="choice-card" id="chooseLabel">
         <div class="choice-icon">L</div>
         <div class="choice-name">From label</div>
-        <div class="choice-sub">exact, free</div>
       </div>
-    </div>
-    <div class="choice-row">
+      <div class="choice-card" id="chooseRecipe">
+        <div class="choice-icon">R</div>
+        <div class="choice-name">From recipe</div>
+      </div>
       <div class="choice-card" id="chooseFresh">
         <div class="choice-icon">+</div>
-        <div class="choice-name">Log food</div>
-        <div class="choice-sub">restaurant / one-off</div>
-      </div>
-      <div class="choice-card" id="chooseNewRecipe">
-        <div class="choice-icon">★</div>
-        <div class="choice-name">Save recipe</div>
-        <div class="choice-sub">cook once, log later</div>
+        <div class="choice-name">One-off</div>
       </div>
     </div>
     <div class="btn-row">
@@ -1271,7 +1262,14 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
 // ============================================================
 // FAB → choice modal
 // ============================================================
-document.getElementById('addBtn').addEventListener('click', () => openModal('chooseModal'));
+document.getElementById('addBtn').addEventListener('click', () => {
+  const activeTab = document.querySelector('.nav-btn.active')?.dataset.tab;
+  if (activeTab === 'recipes') {
+    openFoodModal('recipe');
+  } else {
+    openModal('chooseModal');
+  }
+});
 document.getElementById('chooseCancel').addEventListener('click', closeAllModals);
 
 document.getElementById('chooseRecipe').addEventListener('click', () => {
@@ -1303,10 +1301,6 @@ document.getElementById('chooseRecipe').addEventListener('click', () => {
 document.getElementById('chooseFresh').addEventListener('click', () => {
   closeAllModals();
   openFoodModal('log');
-});
-document.getElementById('chooseNewRecipe').addEventListener('click', () => {
-  closeAllModals();
-  openFoodModal('recipe');
 });
 document.getElementById('chooseLabel').addEventListener('click', () => {
   closeAllModals();
