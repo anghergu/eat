@@ -525,7 +525,7 @@
       <div class="stat-value mono"><span id="statAvgF">0</span><span class="stat-unit">g</span></div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Avg water</div>
+      <div class="stat-label">Avg water / logged day</div>
       <div class="stat-value mono"><span id="statAvgWater">0</span><span class="stat-unit">ml</span></div>
     </div>
     <div class="stat-card">
@@ -724,31 +724,38 @@
       <div class="estimate" id="editLabelEstimate"></div>
     </div>
 
-    <!-- Fresh / one-off / generic: edit raw values -->
+    <!-- Fresh / one-off: edit ingredients and re-estimate -->
     <div id="editFreshFields" style="display:none">
       <div class="field">
         <label>Name</label>
         <input type="text" id="editName">
       </div>
-      <div class="field-row">
-        <div class="field">
-          <label>Calories (kcal)</label>
-          <input type="number" id="editCal" inputmode="decimal">
-        </div>
-        <div class="field">
-          <label>Protein (g)</label>
-          <input type="number" id="editP" inputmode="decimal">
-        </div>
+      <div class="field">
+        <label>Cooking method (optional)</label>
+        <select id="editCookMethod">
+          <option value="">Not relevant / raw</option>
+          <option>Boiled</option><option>Steamed</option>
+          <option>Baked</option><option>Grilled</option>
+          <option>Pan-fried</option><option>Deep-fried</option>
+          <option>Stir-fried</option><option>Roasted</option>
+          <option>Sauteed</option>
+        </select>
       </div>
-      <div class="field-row">
-        <div class="field">
-          <label>Carbs (g)</label>
-          <input type="number" id="editC" inputmode="decimal">
-        </div>
-        <div class="field">
-          <label>Fat (g)</label>
-          <input type="number" id="editF" inputmode="decimal">
-        </div>
+      <div class="field">
+        <label>Ingredients</label>
+        <div id="editIngredients"></div>
+        <button class="add-ingredient" id="editAddIng">+ add ingredient</button>
+      </div>
+      <div class="estimate" id="editFreshEstimate" style="display:none">
+        <div class="estimate-title">Re-calculated</div>
+        <div id="editFreshEstimateContent"></div>
+      </div>
+      <div id="editFreshErrorBox"></div>
+      <div class="settings-help" style="margin-top:8px">
+        Edit ingredients or amounts, then re-calculate. Costs one API call.
+      </div>
+      <div class="btn-row" style="margin-top:8px">
+        <button class="btn btn-primary" id="editRecalcBtn" style="flex:1">Re-calculate</button>
       </div>
     </div>
 
@@ -768,7 +775,7 @@
 </div>
 
 <!-- Confirm dialog (for deletes) -->
-<div class="modal-overlay" id="confirmModal">
+<div class="modal-overlay" id="confirmModal" style="z-index:200">
   <div class="modal">
     <div class="modal-handle"></div>
     <h2 id="confirmTitle">Are you sure?</h2>
@@ -801,7 +808,7 @@
     </div>
 
     <div class="field">
-      <label>Per 100g / 100ml</label>
+      <label>Per 100g / 100ml — required</label>
       <div class="field-row" style="margin-bottom:8px">
         <div>
           <input type="number" id="lbl100Cal" placeholder="kcal" inputmode="decimal">
@@ -816,6 +823,26 @@
         </div>
         <div>
           <input type="number" id="lbl100F" placeholder="fat g" inputmode="decimal">
+        </div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Optional details (per 100g / 100ml)</label>
+      <div class="field-row" style="margin-bottom:8px">
+        <div>
+          <input type="number" id="lbl100Fibre" placeholder="fibre g" inputmode="decimal">
+        </div>
+        <div>
+          <input type="number" id="lbl100Sugar" placeholder="sugar g" inputmode="decimal">
+        </div>
+      </div>
+      <div class="field-row">
+        <div>
+          <input type="number" id="lbl100SatFat" placeholder="sat. fat g" inputmode="decimal">
+        </div>
+        <div>
+          <input type="number" id="lbl100TransFat" placeholder="trans fat g" inputmode="decimal">
         </div>
       </div>
     </div>
@@ -1052,6 +1079,28 @@ function fmtDateLabel(d) {
   if (diff === -1) return 'Yesterday';
   if (diff === 1) return 'Tomorrow';
   return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+// Nutrition fields & helpers
+const NUTRIENT_KEYS = ['calories', 'protein', 'carbs', 'fat', 'fibre', 'sugar', 'saturatedFat', 'transFat'];
+function scaleNutrition(n, factor) {
+  const out = {};
+  NUTRIENT_KEYS.forEach(k => out[k] = (n[k] || 0) * factor);
+  return out;
+}
+function emptyNutrition() {
+  const out = {};
+  NUTRIENT_KEYS.forEach(k => out[k] = 0);
+  return out;
+}
+function addNutrition(a, b) {
+  const out = {};
+  NUTRIENT_KEYS.forEach(k => out[k] = (a[k] || 0) + (b[k] || 0));
+  return out;
+}
+// Compute unsaturated fat from total - saturated - trans (clamped to >= 0)
+function unsaturatedFat(n) {
+  return Math.max(0, (n.fat || 0) - (n.saturatedFat || 0) - (n.transFat || 0));
 }
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -1303,7 +1352,7 @@ function openDayDetail(key) {
   const day = log[key] || {};
   const d = new Date(key + 'T00:00');
   document.getElementById('ddDate').textContent = fmtDateLabel(d);
-  let cal = 0, p = 0, c = 0, f = 0;
+  let totals = emptyNutrition();
   let html = '';
   ['Breakfast', 'Lunch', 'Dinner', 'Snacks'].forEach(m => {
     const items = day[m] || [];
@@ -1318,11 +1367,32 @@ function openDayDetail(key) {
         <span>${escapeHtml(i.name)}</span>
         <span class="mono" style="color:var(--text-dim)">${Math.round(i.calories)}</span>
       </div>`;
-      cal += i.calories || 0; p += i.protein || 0;
-      c += i.carbs || 0; f += i.fat || 0;
+      totals = addNutrition(totals, i);
     });
     html += '</div>';
   });
+
+  // Detailed breakdown (only if any food)
+  if (totals.calories > 0) {
+    const unsat = unsaturatedFat(totals);
+    html += `<div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+      <div style="color:var(--accent);font-style:italic;font-size:15px;margin-bottom:8px">
+        Daily breakdown
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;font-size:13px">
+        <div style="display:flex;justify-content:space-between"><span>Calories</span><span class="mono">${Math.round(totals.calories)} kcal</span></div>
+        <div style="display:flex;justify-content:space-between"><span>Protein</span><span class="mono">${Math.round(totals.protein)} g</span></div>
+        <div style="display:flex;justify-content:space-between"><span>Carbs</span><span class="mono">${Math.round(totals.carbs)} g</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--text-dim)">— sugar</span><span class="mono" style="color:var(--text-dim)">${Math.round(totals.sugar)} g</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--text-dim)">— fibre</span><span class="mono" style="color:var(--text-dim)">${Math.round(totals.fibre)} g</span></div>
+        <div></div>
+        <div style="display:flex;justify-content:space-between"><span>Fat</span><span class="mono">${Math.round(totals.fat)} g</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--text-dim)">— saturated</span><span class="mono" style="color:var(--text-dim)">${Math.round(totals.saturatedFat)} g</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--text-dim)">— unsaturated</span><span class="mono" style="color:var(--text-dim)">${Math.round(unsat)} g</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--text-dim)">— trans</span><span class="mono" style="color:var(--text-dim)">${Math.round(totals.transFat)} g</span></div>
+      </div>
+    </div>`;
+  }
 
   // Water section
   const waterEntries = (loadWater()[key]) || [];
@@ -1337,35 +1407,40 @@ function openDayDetail(key) {
       html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;gap:12px">
         <span>${t}</span>
         <span class="mono" style="color:var(--text-dim);flex:1;text-align:right">${Math.round(w.ml)} ml</span>
-        <button class="item-delete water-delete" data-key="${key}" data-idx="${idx}" style="padding:0 6px">×</button>
+        <button class="item-delete water-delete" data-key="${key}" data-idx="${idx}" style="padding:6px 10px;font-size:18px">×</button>
       </div>`;
     });
     html += '</div>';
   }
 
   document.getElementById('ddTotals').innerHTML =
-    `<span class="mono">${Math.round(cal)} kcal</span> · ${Math.round(p)}g P · ${Math.round(c)}g C · ${Math.round(f)}g F${totalMl > 0 ? ' · ' + Math.round(totalMl) + 'ml water' : ''}`;
+    `<span class="mono">${Math.round(totals.calories)} kcal</span> · ${Math.round(totals.protein)}g P · ${Math.round(totals.carbs)}g C · ${Math.round(totals.fat)}g F${totalMl > 0 ? ' · ' + Math.round(totalMl) + 'ml water' : ''}`;
   document.getElementById('ddMeals').innerHTML = html || '<div style="color:var(--text-dim)">no meals</div>';
 
-  document.querySelectorAll('#ddMeals .water-delete').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const k = btn.dataset.key;
-      const idx = parseInt(btn.dataset.idx);
-      const water = loadWater();
-      if (!water[k] || !water[k][idx]) return;
-      const entry = water[k][idx];
-      const ok = await confirmDialog({
-        title: 'Delete this water entry?',
-        message: `${Math.round(entry.ml)} ml will be removed.`,
-      });
-      if (!ok) return;
-      water[k].splice(idx, 1);
-      saveWater(water);
-      openDayDetail(k); // re-render the day
-      renderHistory();
+  // Use event delegation on the container so handlers persist through re-renders
+  const ddMealsEl = document.getElementById('ddMeals');
+  ddMealsEl.onclick = async (e) => {
+    const btn = e.target.closest('.water-delete');
+    if (!btn) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const k = btn.dataset.key;
+    const idx = parseInt(btn.dataset.idx);
+    const water = loadWater();
+    if (!water[k] || !water[k][idx]) return;
+    const entry = water[k][idx];
+    const ok = await confirmDialog({
+      title: 'Delete this water entry?',
+      message: `${Math.round(entry.ml)} ml will be removed.`,
     });
-  });
+    if (!ok) return;
+    const w2 = loadWater();
+    if (w2[k] && w2[k][idx]) {
+      w2[k].splice(idx, 1);
+      saveWater(w2);
+    }
+    openDayDetail(k); // re-render the day
+  };
   openModal('dayDetailModal');
 }
 
@@ -1478,7 +1553,15 @@ document.querySelectorAll('[data-close]').forEach(b => {
   b.addEventListener('click', closeAllModals);
 });
 document.querySelectorAll('.modal-overlay').forEach(m => {
-  m.addEventListener('click', (e) => { if (e.target === m) closeAllModals(); });
+  m.addEventListener('click', (e) => {
+    if (e.target !== m) return;
+    // Confirm modal: just close itself, don't disturb whatever is underneath
+    if (m.id === 'confirmModal') {
+      m.classList.remove('open');
+    } else {
+      closeAllModals();
+    }
+  });
 });
 
 // Confirm dialog helper. Returns a Promise<boolean>.
@@ -1493,7 +1576,8 @@ function confirmDialog(opts) {
     const cleanup = () => {
       yesBtn.replaceWith(yesBtn.cloneNode(true));
       noBtn.replaceWith(noBtn.cloneNode(true));
-      closeAllModals();
+      // Only close the confirm modal itself, not whatever's underneath
+      document.getElementById('confirmModal').classList.remove('open');
     };
     document.getElementById('confirmYes').addEventListener('click', () => { cleanup(); resolve(true); }, { once: true });
     document.getElementById('confirmNo').addEventListener('click', () => { cleanup(); resolve(false); }, { once: true });
@@ -1627,25 +1711,104 @@ function openEditEntry(meal, idx) {
 
 function showEditFreshFields(item) {
   document.getElementById('editFreshFields').style.display = 'block';
-  document.getElementById('editName').value = item.name;
-  document.getElementById('editCal').value = Math.round(item.calories);
-  document.getElementById('editP').value = Math.round(item.protein);
-  document.getElementById('editC').value = Math.round(item.carbs);
-  document.getElementById('editF').value = Math.round(item.fat);
+  document.getElementById('editName').value = item.name || '';
+  document.getElementById('editCookMethod').value =
+    item.source?.cookMethod || item.cookMethod || '';
+  // Populate ingredient rows from saved data if present
+  const container = document.getElementById('editIngredients');
+  container.innerHTML = '';
+  const savedIngs = item.source?.ingredients || [];
+  if (savedIngs.length) {
+    savedIngs.forEach(ing => addEditIngredientRow(ing.name, ing.amount, ing.unit));
+  } else {
+    addEditIngredientRow();
+  }
+  document.getElementById('editFreshEstimate').style.display = 'none';
+  document.getElementById('editFreshErrorBox').innerHTML = '';
+  pendingEditRecalc = null;
 }
+
+let pendingEditRecalc = null; // holds re-estimated totals if user has re-calculated
+
+function addEditIngredientRow(name = '', amount = '', unit = 'g') {
+  const row = document.createElement('div');
+  row.className = 'ingredient-row';
+  row.innerHTML = `
+    <input type="text" placeholder="ingredient" value="${escapeHtml(name)}">
+    <input type="number" placeholder="amt" inputmode="decimal" value="${amount}">
+    <select>
+      <option value="g" ${unit==='g'?'selected':''}>g</option>
+      <option value="ml" ${unit==='ml'?'selected':''}>ml</option>
+      <option value="tbsp" ${unit==='tbsp'?'selected':''}>tbsp</option>
+      <option value="tsp" ${unit==='tsp'?'selected':''}>tsp</option>
+      <option value="cup" ${unit==='cup'?'selected':''}>cup</option>
+      <option value="piece" ${unit==='piece'?'selected':''}>piece</option>
+    </select>
+    <button class="remove" type="button">×</button>
+  `;
+  row.querySelector('.remove').addEventListener('click', () => {
+    if (document.getElementById('editIngredients').children.length > 1) row.remove();
+  });
+  document.getElementById('editIngredients').appendChild(row);
+}
+
+document.getElementById('editAddIng').addEventListener('click', () => addEditIngredientRow());
+
+document.getElementById('editRecalcBtn').addEventListener('click', async () => {
+  if (!editContext) return;
+  const name = document.getElementById('editName').value.trim();
+  const cookMethod = document.getElementById('editCookMethod').value;
+  if (!name) { alert('Name required'); return; }
+  const rows = document.getElementById('editIngredients').querySelectorAll('.ingredient-row');
+  const ingredients = [];
+  rows.forEach(row => {
+    const inputs = row.querySelectorAll('input, select');
+    const iname = inputs[0].value.trim();
+    const amt = parseFloat(inputs[1].value);
+    const unit = inputs[2].value;
+    if (iname && amt) ingredients.push({ name: iname, amount: amt, unit });
+  });
+  if (ingredients.length === 0) {
+    alert('Add at least one ingredient with an amount');
+    return;
+  }
+
+  const errorBox = document.getElementById('editFreshErrorBox');
+  const estBox = document.getElementById('editFreshEstimate');
+  const btn = document.getElementById('editRecalcBtn');
+  errorBox.innerHTML = '';
+  estBox.style.display = 'block';
+  estBox.querySelector('#editFreshEstimateContent').innerHTML =
+    '<div class="loading spin">Calculating...</div>';
+  btn.disabled = true;
+
+  try {
+    const total = await estimateNutrition(name, ingredients, cookMethod);
+    pendingEditRecalc = { total, ingredients, cookMethod, name };
+    document.getElementById('editFreshEstimateContent').innerHTML = `
+      <div class="estimate-row"><span>Calories</span><span class="v mono">${Math.round(total.calories)} kcal</span></div>
+      <div class="estimate-row"><span>Protein</span><span class="v mono">${Math.round(total.protein)} g</span></div>
+      <div class="estimate-row"><span>Carbs</span><span class="v mono">${Math.round(total.carbs)} g</span></div>
+      <div class="estimate-row"><span>Fat</span><span class="v mono">${Math.round(total.fat)} g</span></div>
+      <div style="margin-top:6px;font-size:11px;color:var(--text-dim);font-style:italic">Tap Save to apply</div>
+    `;
+  } catch (err) {
+    errorBox.innerHTML = `<div class="error-msg">${escapeHtml(err.message)}</div>`;
+    estBox.style.display = 'none';
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 function updateEditPortionEstimate(r) {
   const p = parseFloat(document.getElementById('editPortionInput').value) || 0;
-  const cal = r.perPortion.calories * p;
-  const pr = r.perPortion.protein * p;
-  const c = r.perPortion.carbs * p;
-  const f = r.perPortion.fat * p;
+  const scaled = scaleNutrition(r.perPortion, p);
   document.getElementById('editPortionEstimate').innerHTML = `
     <div class="estimate-title">New values</div>
-    <div class="estimate-row"><span>Calories</span><span class="v mono">${Math.round(cal)} kcal</span></div>
-    <div class="estimate-row"><span>Protein</span><span class="v mono">${Math.round(pr)} g</span></div>
-    <div class="estimate-row"><span>Carbs</span><span class="v mono">${Math.round(c)} g</span></div>
-    <div class="estimate-row"><span>Fat</span><span class="v mono">${Math.round(f)} g</span></div>
+    <div class="estimate-row"><span>Calories</span><span class="v mono">${Math.round(scaled.calories)} kcal</span></div>
+    <div class="estimate-row"><span>Protein</span><span class="v mono">${Math.round(scaled.protein)} g</span></div>
+    <div class="estimate-row"><span>Carbs</span><span class="v mono">${Math.round(scaled.carbs)} g</span></div>
+    <div class="estimate-row"><span>Fat</span><span class="v mono">${Math.round(scaled.fat)} g</span></div>
   `;
 }
 
@@ -1679,13 +1842,13 @@ function updateEditLabelEstimate() {
     document.getElementById('editLabelEstimate').innerHTML = '';
     return;
   }
-  const f = amt / 100;
+  const scaled = scaleNutrition(per, amt / 100);
   document.getElementById('editLabelEstimate').innerHTML = `
     <div class="estimate-title">New values</div>
-    <div class="estimate-row"><span>Calories</span><span class="v mono">${Math.round(per.calories * f)} kcal</span></div>
-    <div class="estimate-row"><span>Protein</span><span class="v mono">${Math.round(per.protein * f)} g</span></div>
-    <div class="estimate-row"><span>Carbs</span><span class="v mono">${Math.round(per.carbs * f)} g</span></div>
-    <div class="estimate-row"><span>Fat</span><span class="v mono">${Math.round(per.fat * f)} g</span></div>
+    <div class="estimate-row"><span>Calories</span><span class="v mono">${Math.round(scaled.calories)} kcal</span></div>
+    <div class="estimate-row"><span>Protein</span><span class="v mono">${Math.round(scaled.protein)} g</span></div>
+    <div class="estimate-row"><span>Carbs</span><span class="v mono">${Math.round(scaled.carbs)} g</span></div>
+    <div class="estimate-row"><span>Fat</span><span class="v mono">${Math.round(scaled.fat)} g</span></div>
   `;
 }
 ['editLblAmount','editLblUnit'].forEach(id => {
@@ -1709,10 +1872,8 @@ document.getElementById('editSaveBtn').addEventListener('click', () => {
     if (r) {
       const p = parseFloat(document.getElementById('editPortionInput').value) || 0;
       if (p <= 0) { alert('Portions must be > 0'); return; }
-      item.calories = r.perPortion.calories * p;
-      item.protein = r.perPortion.protein * p;
-      item.carbs = r.perPortion.carbs * p;
-      item.fat = r.perPortion.fat * p;
+      const scaled = scaleNutrition(r.perPortion, p);
+      Object.assign(item, scaled);
       item.detail = `${p} portion${p === 1 ? '' : 's'}`;
       item.source.portions = p;
     }
@@ -1721,23 +1882,25 @@ document.getElementById('editSaveBtn').addEventListener('click', () => {
     const unit = document.getElementById('editLblUnit').value;
     if (!amt || amt <= 0) { alert('Amount must be > 0'); return; }
     const per = item.source.per100;
-    const f = amt / 100;
-    item.calories = per.calories * f;
-    item.protein = per.protein * f;
-    item.carbs = per.carbs * f;
-    item.fat = per.fat * f;
+    const scaled = scaleNutrition(per, amt / 100);
+    Object.assign(item, scaled);
     item.detail = `${amt}${unit} · ${per.calories} kcal/100${unit}`;
     item.source.amount = amt;
     item.source.unit = unit;
   } else {
-    // Fresh fields
+    // Fresh: apply re-calc if available, otherwise just update name/meta
     const name = document.getElementById('editName').value.trim();
     if (!name) { alert('Name required'); return; }
     item.name = name;
-    item.calories = parseFloat(document.getElementById('editCal').value) || 0;
-    item.protein = parseFloat(document.getElementById('editP').value) || 0;
-    item.carbs = parseFloat(document.getElementById('editC').value) || 0;
-    item.fat = parseFloat(document.getElementById('editF').value) || 0;
+    if (pendingEditRecalc) {
+      Object.assign(item, pendingEditRecalc.total);
+      item.detail = pendingEditRecalc.ingredients.map(i => `${i.amount}${i.unit} ${i.name}`).join(' · ') +
+        (pendingEditRecalc.cookMethod ? ` · ${pendingEditRecalc.cookMethod.toLowerCase()}` : '');
+      item.source = item.source || { type: 'fresh' };
+      item.source.ingredients = pendingEditRecalc.ingredients;
+      item.source.cookMethod = pendingEditRecalc.cookMethod;
+      item.cookMethod = pendingEditRecalc.cookMethod;
+    }
   }
 
   // Move between meals if needed
@@ -1749,6 +1912,7 @@ document.getElementById('editSaveBtn').addEventListener('click', () => {
     log[k][oldMeal][oldIdx] = item;
   }
   saveLog(log);
+  pendingEditRecalc = null;
   closeAllModals();
   renderToday();
 });
@@ -1756,6 +1920,28 @@ document.getElementById('editSaveBtn').addEventListener('click', () => {
 // ============================================================
 // FROM LABEL
 // ============================================================
+const LABEL_FIELDS = ['labelName','lbl100Cal','lbl100P','lbl100C','lbl100F',
+  'lbl100Fibre','lbl100Sugar','lbl100SatFat','lbl100TransFat','lblAmount'];
+
+function readLabelInputs() {
+  const num = id => parseFloat(document.getElementById(id).value);
+  return {
+    name: document.getElementById('labelName').value.trim(),
+    per100: {
+      calories: num('lbl100Cal'),
+      protein: num('lbl100P') || 0,
+      carbs: num('lbl100C') || 0,
+      fat: num('lbl100F') || 0,
+      fibre: num('lbl100Fibre') || 0,
+      sugar: num('lbl100Sugar') || 0,
+      saturatedFat: num('lbl100SatFat') || 0,
+      transFat: num('lbl100TransFat') || 0,
+    },
+    amount: num('lblAmount'),
+    unit: document.getElementById('lblUnit').value,
+  };
+}
+
 function openLabelModal() {
   const h = new Date().getHours();
   let m = 'Snacks';
@@ -1763,65 +1949,52 @@ function openLabelModal() {
   else if (h < 15) m = 'Lunch';
   else if (h < 21) m = 'Dinner';
   document.getElementById('labelMeal').value = m;
-  ['labelName','lbl100Cal','lbl100P','lbl100C','lbl100F','lblAmount']
-    .forEach(id => document.getElementById(id).value = '');
+  LABEL_FIELDS.forEach(id => document.getElementById(id).value = '');
   document.getElementById('lblUnit').value = 'g';
   document.getElementById('labelEstimateBox').style.display = 'none';
   openModal('labelModal');
 }
 
 function updateLabelPreview() {
-  const cal100 = parseFloat(document.getElementById('lbl100Cal').value);
-  const p100 = parseFloat(document.getElementById('lbl100P').value) || 0;
-  const c100 = parseFloat(document.getElementById('lbl100C').value) || 0;
-  const f100 = parseFloat(document.getElementById('lbl100F').value) || 0;
-  const amount = parseFloat(document.getElementById('lblAmount').value);
+  const data = readLabelInputs();
   const box = document.getElementById('labelEstimateBox');
-  if (isNaN(cal100) || isNaN(amount) || amount <= 0) {
+  if (isNaN(data.per100.calories) || isNaN(data.amount) || data.amount <= 0) {
     box.style.display = 'none';
     return;
   }
-  const f = amount / 100;
-  const cal = cal100 * f, p = p100 * f, c = c100 * f, fat = f100 * f;
+  const scaled = scaleNutrition(data.per100, data.amount / 100);
   document.getElementById('labelEstimateContent').innerHTML = `
-    <div class="estimate-row"><span>Calories</span><span class="v mono">${Math.round(cal)} kcal</span></div>
-    <div class="estimate-row"><span>Protein</span><span class="v mono">${Math.round(p)} g</span></div>
-    <div class="estimate-row"><span>Carbs</span><span class="v mono">${Math.round(c)} g</span></div>
-    <div class="estimate-row"><span>Fat</span><span class="v mono">${Math.round(fat)} g</span></div>
+    <div class="estimate-row"><span>Calories</span><span class="v mono">${Math.round(scaled.calories)} kcal</span></div>
+    <div class="estimate-row"><span>Protein</span><span class="v mono">${Math.round(scaled.protein)} g</span></div>
+    <div class="estimate-row"><span>Carbs</span><span class="v mono">${Math.round(scaled.carbs)} g</span></div>
+    <div class="estimate-row"><span>Fat</span><span class="v mono">${Math.round(scaled.fat)} g</span></div>
   `;
   box.style.display = 'block';
 }
 
-['lbl100Cal','lbl100P','lbl100C','lbl100F','lblAmount','lblUnit'].forEach(id => {
-  document.getElementById(id).addEventListener('input', updateLabelPreview);
-  document.getElementById(id).addEventListener('change', updateLabelPreview);
+LABEL_FIELDS.concat(['lblUnit']).forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('input', updateLabelPreview);
+  el.addEventListener('change', updateLabelPreview);
 });
 
 document.getElementById('labelSaveBtn').addEventListener('click', () => {
-  const name = document.getElementById('labelName').value.trim();
-  const cal100 = parseFloat(document.getElementById('lbl100Cal').value);
-  const p100 = parseFloat(document.getElementById('lbl100P').value) || 0;
-  const c100 = parseFloat(document.getElementById('lbl100C').value) || 0;
-  const f100 = parseFloat(document.getElementById('lbl100F').value) || 0;
-  const amount = parseFloat(document.getElementById('lblAmount').value);
-  const unit = document.getElementById('lblUnit').value;
-  if (!name) { alert('Give it a name'); return; }
-  if (isNaN(cal100)) { alert('Enter calories per 100g'); return; }
-  if (isNaN(amount) || amount <= 0) { alert('Enter amount eaten'); return; }
-  const f = amount / 100;
+  const data = readLabelInputs();
+  if (!data.name) { alert('Give it a name'); return; }
+  if (isNaN(data.per100.calories)) { alert('Enter calories per 100g'); return; }
+  if (isNaN(data.amount) || data.amount <= 0) { alert('Enter amount eaten'); return; }
+  const scaled = scaleNutrition(data.per100, data.amount / 100);
   const meal = document.getElementById('labelMeal').value;
   const log = loadLog();
   const k = dateKey(currentDate);
   if (!log[k]) log[k] = {};
   if (!log[k][meal]) log[k][meal] = [];
   log[k][meal].push({
-    name,
-    detail: `${amount}${unit} · ${cal100} kcal/100${unit}`,
-    calories: cal100 * f,
-    protein: p100 * f,
-    carbs: c100 * f,
-    fat: f100 * f,
-    source: { type: 'label', per100: { calories: cal100, protein: p100, carbs: c100, fat: f100 }, amount, unit },
+    name: data.name,
+    detail: `${data.amount}${data.unit} · ${data.per100.calories} kcal/100${data.unit}`,
+    ...scaled,
+    source: { type: 'label', per100: data.per100, amount: data.amount, unit: data.unit },
     timestamp: Date.now(),
   });
   saveLog(log);
@@ -1887,13 +2060,11 @@ document.getElementById('logRecipeSave').addEventListener('click', () => {
   const k = dateKey(currentDate);
   if (!log[k]) log[k] = {};
   if (!log[k][meal]) log[k][meal] = [];
+  const scaled = scaleNutrition(r.perPortion, p);
   log[k][meal].push({
     name: r.name,
     detail: `${p} portion${p === 1 ? '' : 's'}`,
-    calories: r.perPortion.calories * p,
-    protein: r.perPortion.protein * p,
-    carbs: r.perPortion.carbs * p,
-    fat: r.perPortion.fat * p,
+    ...scaled,
     source: { type: 'recipe', recipeId: r.id, portions: p },
     timestamp: Date.now(),
   });
@@ -1982,9 +2153,9 @@ Ingredients:
 ${ingList}${cookNote}
 
 Respond ONLY with valid JSON, no other text, in this exact format:
-{"calories": <number>, "protein": <number>, "carbs": <number>, "fat": <number>}
+{"calories": <number>, "protein": <number>, "carbs": <number>, "fat": <number>, "fibre": <number>, "sugar": <number>, "saturatedFat": <number>, "transFat": <number>}
 
-Numbers should be the totals for the entire dish (sum of all ingredients), in kcal and grams.`;
+Numbers are totals for the entire dish in grams (calories in kcal). fibre and sugar are subsets of carbs. saturatedFat and transFat are subsets of fat. Use 0 if a value is negligible. Be conservative with transFat (modern foods have very little).`;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -1996,7 +2167,7 @@ Numbers should be the totals for the entire dish (sum of all ingredients), in kc
     },
     body: JSON.stringify({
       model: getModel(),
-      max_tokens: 200,
+      max_tokens: 300,
       messages: [{ role: 'user', content: prompt }],
     }),
   });
@@ -2015,6 +2186,10 @@ Numbers should be the totals for the entire dish (sum of all ingredients), in kc
     protein: parsed.protein || 0,
     carbs: parsed.carbs || 0,
     fat: parsed.fat || 0,
+    fibre: parsed.fibre || 0,
+    sugar: parsed.sugar || 0,
+    saturatedFat: parsed.saturatedFat || 0,
+    transFat: parsed.transFat || 0,
   };
 }
 
@@ -2051,12 +2226,7 @@ document.getElementById('estimateBtn').addEventListener('click', async () => {
     const portions = foodModalMode === 'recipe'
       ? Math.max(0.5, parseFloat(document.getElementById('recipePortions').value) || 1)
       : 1;
-    const perPortion = {
-      calories: total.calories / portions,
-      protein: total.protein / portions,
-      carbs: total.carbs / portions,
-      fat: total.fat / portions,
-    };
+    const perPortion = scaleNutrition(total, 1 / portions);
 
     if (foodModalMode === 'recipe') {
       pendingRecipe = {
@@ -2087,7 +2257,7 @@ document.getElementById('estimateBtn').addEventListener('click', async () => {
                 (cookMethod ? ` · ${cookMethod.toLowerCase()}` : ''),
         ...total,
         cookMethod,
-        source: { type: 'fresh' },
+        source: { type: 'fresh', ingredients, cookMethod },
       };
       document.getElementById('foodEstimateTitle').textContent = 'Estimated nutrition';
       document.getElementById('foodEstimateContent').innerHTML = `
