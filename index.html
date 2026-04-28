@@ -101,6 +101,35 @@
   .macro-val { font-size: 20px; font-weight: 400; font-feature-settings: 'tnum'; }
   .macro-unit { font-size: 11px; color: var(--text-dim); margin-left: 2px; }
 
+  .water-card {
+    margin: 0 16px 24px;
+    padding: 14px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .water-info { display: flex; align-items: baseline; gap: 12px; }
+  .water-label {
+    font-size: 14px; font-style: italic; color: var(--accent);
+  }
+  .water-amount { font-size: 18px; font-feature-settings: 'tnum'; }
+  .water-unit { font-size: 11px; color: var(--text-dim); margin-left: 2px; }
+  .water-add-btn {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    font-family: inherit; font-size: 20px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .water-add-btn:active { background: var(--accent); color: #1a1a1a; }
+
   .meals { padding: 0 16px; }
   .meal {
     margin-bottom: 16px; background: var(--surface);
@@ -474,6 +503,14 @@
     </div>
   </section>
 
+  <section class="water-card" id="waterCard">
+    <div class="water-info">
+      <div class="water-label">Water</div>
+      <div class="water-amount mono"><span id="totalWater">0</span><span class="water-unit">ml</span></div>
+    </div>
+    <button class="water-add-btn" id="waterAddBtn">+</button>
+  </section>
+
   <div class="meals" id="mealsContainer"></div>
   <div class="foot">tap + to log a meal</div>
 </div>
@@ -521,16 +558,24 @@
       <div class="stat-value mono"><span id="statAvgP">0</span><span class="stat-unit">g</span></div>
     </div>
     <div class="stat-card">
+      <div class="stat-label">Avg carbs</div>
+      <div class="stat-value mono"><span id="statAvgC">0</span><span class="stat-unit">g</span></div>
+    </div>
+    <div class="stat-card">
       <div class="stat-label">Avg fat</div>
       <div class="stat-value mono"><span id="statAvgF">0</span><span class="stat-unit">g</span></div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Avg water / logged day</div>
-      <div class="stat-value mono"><span id="statAvgWater">0</span><span class="stat-unit">ml</span></div>
+      <div class="stat-label">Avg sugar</div>
+      <div class="stat-value mono"><span id="statAvgSugar">0</span><span class="stat-unit">g</span></div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Today water</div>
-      <div class="stat-value mono"><span id="statTodayWater">0</span><span class="stat-unit">ml</span></div>
+      <div class="stat-label">Avg fibre</div>
+      <div class="stat-value mono"><span id="statAvgFibre">0</span><span class="stat-unit">g</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Avg water</div>
+      <div class="stat-value mono"><span id="statAvgWater">0</span><span class="stat-unit">ml</span></div>
     </div>
   </div>
 
@@ -1174,6 +1219,11 @@ function renderToday() {
   document.getElementById('totalC').textContent = Math.round(totalC);
   document.getElementById('totalF').textContent = Math.round(totalF);
 
+  // Water for the current day
+  const waterEntries = (loadWater()[dateKey(currentDate)]) || [];
+  const totalMl = waterEntries.reduce((s, w) => s + (w.ml || 0), 0);
+  document.getElementById('totalWater').textContent = Math.round(totalMl);
+
   container.querySelectorAll('.item-delete').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -1297,14 +1347,15 @@ function renderHistory() {
     d.setDate(d.getDate() - i);
     const k = dateKey(d);
     const day = log[k] || {};
-    let cal = 0, p = 0, c = 0, f = 0;
+    let cal = 0, p = 0, c = 0, f = 0, sugar = 0, fibre = 0;
     Object.values(day).forEach(meal => meal.forEach(item => {
       cal += item.calories || 0; p += item.protein || 0;
       c += item.carbs || 0; f += item.fat || 0;
+      sugar += item.sugar || 0; fibre += item.fibre || 0;
     }));
     const waterEntries = water[k] || [];
     const ml = waterEntries.reduce((s, w) => s + (w.ml || 0), 0);
-    days.push({ date: d, key: k, cal, p, c, f, ml, hasData: cal > 0 || ml > 0 });
+    days.push({ date: d, key: k, cal, p, c, f, sugar, fibre, ml, hasData: cal > 0 || ml > 0 });
   }
 
   // Chart
@@ -1324,10 +1375,11 @@ function renderHistory() {
   document.getElementById('statAvgCal').textContent = Math.round(avgFood('cal'));
   document.getElementById('statDays').textContent = foodDays.length;
   document.getElementById('statAvgP').textContent = Math.round(avgFood('p'));
+  document.getElementById('statAvgC').textContent = Math.round(avgFood('c'));
   document.getElementById('statAvgF').textContent = Math.round(avgFood('f'));
+  document.getElementById('statAvgSugar').textContent = Math.round(avgFood('sugar'));
+  document.getElementById('statAvgFibre').textContent = Math.round(avgFood('fibre'));
   document.getElementById('statAvgWater').textContent = Math.round(avgWater);
-  const todayWaterMl = days[days.length - 1]?.ml || 0;
-  document.getElementById('statTodayWater').textContent = Math.round(todayWaterMl);
 
   // Day list (most recent with any data first)
   const list = document.getElementById('dayHistoryList');
@@ -1634,6 +1686,9 @@ document.getElementById('chooseLabel').addEventListener('click', () => {
 });
 document.getElementById('chooseWater').addEventListener('click', () => {
   closeAllModals();
+  openWaterModal();
+});
+document.getElementById('waterAddBtn').addEventListener('click', () => {
   openWaterModal();
 });
 
