@@ -550,10 +550,6 @@
       <div class="stat-value mono"><span id="statAvgCal">0</span><span class="stat-unit">kcal</span></div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Days logged</div>
-      <div class="stat-value mono"><span id="statDays">0</span></div>
-    </div>
-    <div class="stat-card">
       <div class="stat-label">Avg protein</div>
       <div class="stat-value mono"><span id="statAvgP">0</span><span class="stat-unit">g</span></div>
     </div>
@@ -663,7 +659,7 @@
     <div class="modal-handle"></div>
     <h2>What did you eat?</h2>
     <div class="modal-sub">Pick how you want to log it</div>
-    <div class="choice-row">
+    <div class="choice-row choice-row-3">
       <div class="choice-card" id="chooseLabel">
         <div class="choice-icon">L</div>
         <div class="choice-name">From label</div>
@@ -672,15 +668,9 @@
         <div class="choice-icon">R</div>
         <div class="choice-name">From recipe</div>
       </div>
-    </div>
-    <div class="choice-row">
       <div class="choice-card" id="chooseFresh">
         <div class="choice-icon">+</div>
         <div class="choice-name">One-off</div>
-      </div>
-      <div class="choice-card" id="chooseWater">
-        <div class="choice-icon">W</div>
-        <div class="choice-name">Water</div>
       </div>
     </div>
     <div class="btn-row">
@@ -1373,7 +1363,6 @@ function renderHistory() {
   const avgFood = (key) => foodDays.length ? foodDays.reduce((s, d) => s + d[key], 0) / foodDays.length : 0;
   const avgWater = waterDays.length ? waterDays.reduce((s, d) => s + d.ml, 0) / waterDays.length : 0;
   document.getElementById('statAvgCal').textContent = Math.round(avgFood('cal'));
-  document.getElementById('statDays').textContent = foodDays.length;
   document.getElementById('statAvgP').textContent = Math.round(avgFood('p'));
   document.getElementById('statAvgC').textContent = Math.round(avgFood('c'));
   document.getElementById('statAvgF').textContent = Math.round(avgFood('f'));
@@ -1683,10 +1672,6 @@ document.getElementById('chooseFresh').addEventListener('click', () => {
 document.getElementById('chooseLabel').addEventListener('click', () => {
   closeAllModals();
   openLabelModal();
-});
-document.getElementById('chooseWater').addEventListener('click', () => {
-  closeAllModals();
-  openWaterModal();
 });
 document.getElementById('waterAddBtn').addEventListener('click', () => {
   openWaterModal();
