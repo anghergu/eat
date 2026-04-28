@@ -547,8 +547,16 @@
       <div class="settings-label">Status</div>
       <div class="settings-label mono" id="apiStatus" style="color:var(--text-dim)">not set</div>
     </div>
+    <div class="settings-row">
+      <div class="settings-label">Model</div>
+      <select id="modelSelect" class="settings-action" style="padding:6px 10px;background:var(--surface-2)">
+        <option value="claude-haiku-4-5-20251001">Haiku 4.5 (cheapest)</option>
+        <option value="claude-sonnet-4-6">Sonnet 4.6 (recommended)</option>
+        <option value="claude-opus-4-7">Opus 4.7 (overkill)</option>
+      </select>
+    </div>
     <div class="settings-help">
-      Get a key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>. Set a monthly spend limit there to protect against accidental overuse. Estimates cost ~$0.001 each.
+      Get a key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>. Top up only $5 at a time, no auto-reload, that's your safety cap. Cost per estimate: Haiku ~$0.001, Sonnet ~$0.003, Opus ~$0.005.
     </div>
   </div>
 
@@ -603,30 +611,33 @@
   <div class="modal">
     <div class="modal-handle"></div>
     <h2>What did you eat?</h2>
-    <div class="modal-sub">Pick a saved recipe or log fresh ingredients</div>
+    <div class="modal-sub">Pick how you want to log it</div>
     <div class="choice-row">
       <div class="choice-card" id="chooseRecipe">
         <div class="choice-icon">R</div>
         <div class="choice-name">From recipe</div>
-        <div class="choice-sub">instant</div>
+        <div class="choice-sub">instant, free</div>
       </div>
-      <div class="choice-card" id="chooseFresh">
-        <div class="choice-icon">+</div>
-        <div class="choice-name">Log food</div>
-        <div class="choice-sub">one-off / restaurant</div>
+      <div class="choice-card" id="chooseLabel">
+        <div class="choice-icon">L</div>
+        <div class="choice-name">From label</div>
+        <div class="choice-sub">exact, free</div>
       </div>
     </div>
     <div class="choice-row">
+      <div class="choice-card" id="chooseFresh">
+        <div class="choice-icon">+</div>
+        <div class="choice-name">Log food</div>
+        <div class="choice-sub">restaurant / one-off</div>
+      </div>
       <div class="choice-card" id="chooseNewRecipe">
         <div class="choice-icon">★</div>
-        <div class="choice-name">Save new recipe</div>
+        <div class="choice-name">Save recipe</div>
         <div class="choice-sub">cook once, log later</div>
       </div>
-      <div class="choice-card" id="chooseCancel">
-        <div class="choice-icon">×</div>
-        <div class="choice-name">Cancel</div>
-        <div class="choice-sub">&nbsp;</div>
-      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" id="chooseCancel">Cancel</button>
     </div>
   </div>
 </div>
@@ -640,6 +651,73 @@
     <div class="picker-list" id="recipePickerList"></div>
     <div class="btn-row">
       <button class="btn btn-ghost" data-close>Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- From label -->
+<div class="modal-overlay" id="labelModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2>From label</h2>
+    <div class="modal-sub">Type the per-100g (or per-100ml) values from the package</div>
+
+    <div class="field">
+      <label>Meal</label>
+      <select id="labelMeal">
+        <option>Breakfast</option><option>Lunch</option>
+        <option>Dinner</option><option>Snacks</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Product name</label>
+      <input type="text" id="labelName" placeholder="e.g. Greek yogurt, dark chocolate">
+    </div>
+
+    <div class="field">
+      <label>Per 100g / 100ml</label>
+      <div class="field-row" style="margin-bottom:8px">
+        <div>
+          <input type="number" id="lbl100Cal" placeholder="kcal" inputmode="decimal">
+        </div>
+        <div>
+          <input type="number" id="lbl100P" placeholder="protein g" inputmode="decimal">
+        </div>
+      </div>
+      <div class="field-row">
+        <div>
+          <input type="number" id="lbl100C" placeholder="carbs g" inputmode="decimal">
+        </div>
+        <div>
+          <input type="number" id="lbl100F" placeholder="fat g" inputmode="decimal">
+        </div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>How much did you eat?</label>
+      <div class="field-row">
+        <div>
+          <input type="number" id="lblAmount" placeholder="amount" inputmode="decimal">
+        </div>
+        <div>
+          <select id="lblUnit">
+            <option value="g">grams</option>
+            <option value="ml">millilitres</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="estimate" id="labelEstimateBox" style="display:none">
+      <div class="estimate-title">You'll log</div>
+      <div id="labelEstimateContent"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-ghost" data-close>Cancel</button>
+      <button class="btn btn-primary" id="labelSaveBtn">Save</button>
     </div>
   </div>
 </div>
@@ -802,7 +880,9 @@ const STORAGE = {
   log: 'eat_log_v2',
   recipes: 'eat_recipes_v2',
   apiKey: 'eat_api_key_v2',
+  model: 'eat_model_v2',
 };
+const DEFAULT_MODEL = 'claude-sonnet-4-6';
 
 let currentDate = new Date();
 currentDate.setHours(0,0,0,0);
@@ -828,6 +908,8 @@ function setApiKey(k) {
   if (k) localStorage.setItem(STORAGE.apiKey, k);
   else localStorage.removeItem(STORAGE.apiKey);
 }
+function getModel() { return localStorage.getItem(STORAGE.model) || DEFAULT_MODEL; }
+function setModel(m) { localStorage.setItem(STORAGE.model, m); }
 
 function dateKey(d) {
   const y = d.getFullYear();
@@ -1101,7 +1183,12 @@ function renderSettings() {
     key ? '••••' + key.slice(-4) : 'not set';
   document.getElementById('apiStatus').style.color =
     key ? 'var(--success)' : 'var(--text-dim)';
+  document.getElementById('modelSelect').value = getModel();
 }
+
+document.getElementById('modelSelect').addEventListener('change', (e) => {
+  setModel(e.target.value);
+});
 
 document.getElementById('setKeyBtn').addEventListener('click', () => {
   document.getElementById('keyInput').value = getApiKey();
@@ -1220,6 +1307,86 @@ document.getElementById('chooseFresh').addEventListener('click', () => {
 document.getElementById('chooseNewRecipe').addEventListener('click', () => {
   closeAllModals();
   openFoodModal('recipe');
+});
+document.getElementById('chooseLabel').addEventListener('click', () => {
+  closeAllModals();
+  openLabelModal();
+});
+
+// ============================================================
+// FROM LABEL
+// ============================================================
+function openLabelModal() {
+  const h = new Date().getHours();
+  let m = 'Snacks';
+  if (h < 11) m = 'Breakfast';
+  else if (h < 15) m = 'Lunch';
+  else if (h < 21) m = 'Dinner';
+  document.getElementById('labelMeal').value = m;
+  ['labelName','lbl100Cal','lbl100P','lbl100C','lbl100F','lblAmount']
+    .forEach(id => document.getElementById(id).value = '');
+  document.getElementById('lblUnit').value = 'g';
+  document.getElementById('labelEstimateBox').style.display = 'none';
+  openModal('labelModal');
+}
+
+function updateLabelPreview() {
+  const cal100 = parseFloat(document.getElementById('lbl100Cal').value);
+  const p100 = parseFloat(document.getElementById('lbl100P').value) || 0;
+  const c100 = parseFloat(document.getElementById('lbl100C').value) || 0;
+  const f100 = parseFloat(document.getElementById('lbl100F').value) || 0;
+  const amount = parseFloat(document.getElementById('lblAmount').value);
+  const box = document.getElementById('labelEstimateBox');
+  if (isNaN(cal100) || isNaN(amount) || amount <= 0) {
+    box.style.display = 'none';
+    return;
+  }
+  const f = amount / 100;
+  const cal = cal100 * f, p = p100 * f, c = c100 * f, fat = f100 * f;
+  document.getElementById('labelEstimateContent').innerHTML = `
+    <div class="estimate-row"><span>Calories</span><span class="v mono">${Math.round(cal)} kcal</span></div>
+    <div class="estimate-row"><span>Protein</span><span class="v mono">${Math.round(p)} g</span></div>
+    <div class="estimate-row"><span>Carbs</span><span class="v mono">${Math.round(c)} g</span></div>
+    <div class="estimate-row"><span>Fat</span><span class="v mono">${Math.round(fat)} g</span></div>
+  `;
+  box.style.display = 'block';
+}
+
+['lbl100Cal','lbl100P','lbl100C','lbl100F','lblAmount','lblUnit'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updateLabelPreview);
+  document.getElementById(id).addEventListener('change', updateLabelPreview);
+});
+
+document.getElementById('labelSaveBtn').addEventListener('click', () => {
+  const name = document.getElementById('labelName').value.trim();
+  const cal100 = parseFloat(document.getElementById('lbl100Cal').value);
+  const p100 = parseFloat(document.getElementById('lbl100P').value) || 0;
+  const c100 = parseFloat(document.getElementById('lbl100C').value) || 0;
+  const f100 = parseFloat(document.getElementById('lbl100F').value) || 0;
+  const amount = parseFloat(document.getElementById('lblAmount').value);
+  const unit = document.getElementById('lblUnit').value;
+  if (!name) { alert('Give it a name'); return; }
+  if (isNaN(cal100)) { alert('Enter calories per 100g'); return; }
+  if (isNaN(amount) || amount <= 0) { alert('Enter amount eaten'); return; }
+  const f = amount / 100;
+  const meal = document.getElementById('labelMeal').value;
+  const log = loadLog();
+  const k = dateKey(currentDate);
+  if (!log[k]) log[k] = {};
+  if (!log[k][meal]) log[k][meal] = [];
+  log[k][meal].push({
+    name,
+    detail: `${amount}${unit} · ${cal100} kcal/100${unit}`,
+    calories: cal100 * f,
+    protein: p100 * f,
+    carbs: c100 * f,
+    fat: f100 * f,
+    source: { type: 'label', per100: { calories: cal100, protein: p100, carbs: c100, fat: f100 }, amount, unit },
+    timestamp: Date.now(),
+  });
+  saveLog(log);
+  closeAllModals();
+  switchTab('today');
 });
 
 // ============================================================
@@ -1388,7 +1555,7 @@ Numbers should be the totals for the entire dish (sum of all ingredients), in kc
       'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
+      model: getModel(),
       max_tokens: 200,
       messages: [{ role: 'user', content: prompt }],
     }),
