@@ -2250,8 +2250,6 @@ Estimate the total nutrition. Output JSON only.`;
         system: systemPrompt,
         messages: [
           { role: 'user', content: userPrompt },
-          // Prefill the assistant turn with the opening brace so the model has no choice but to continue with JSON
-          { role: 'assistant', content: '{' },
         ],
       }),
     });
@@ -2263,10 +2261,8 @@ Estimate the total nutrition. Output JSON only.`;
     return data.content?.[0]?.text || '';
   }
 
-  function extractJson(raw, prefilled = true) {
+  function extractJson(raw) {
     let text = raw.replace(/```json|```/g, '').trim();
-    // If we prefilled with '{', the response is missing the opening brace
-    if (prefilled && !text.startsWith('{')) text = '{' + text;
     const firstBrace = text.indexOf('{');
     if (firstBrace === -1) {
       throw new Error('No JSON found. Got: ' + raw.slice(0, 100));
@@ -2299,7 +2295,6 @@ Estimate the total nutrition. Output JSON only.`;
       throw new Error('Could not parse: ' + (lastRaw ? lastRaw.slice(0, 120) : e2.message));
     }
   }
-
   if (typeof parsed.calories !== 'number') {
     throw new Error('Response missing calorie value. Try again or simplify ingredients.');
   }
