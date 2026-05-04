@@ -1808,10 +1808,11 @@ let pendingEditRecalc = null; // holds re-estimated totals if user has re-calcul
 function addEditIngredientRow(name = '', amount = '', unit = 'g') {
   const row = document.createElement('div');
   row.className = 'ingredient-row';
+  const uniq = Math.random().toString(36).slice(2, 8);
   row.innerHTML = `
-    <input type="text" placeholder="ingredient" value="${escapeHtml(name)}">
-    <input type="number" placeholder="amt" inputmode="decimal" value="${amount}">
-    <select>
+    <input type="text" placeholder="ingredient" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" name="eing-${uniq}" value="${escapeHtml(name)}">
+    <input type="number" placeholder="amt" inputmode="decimal" autocomplete="off" name="eamt-${uniq}" value="${amount}">
+    <select name="eunit-${uniq}">
       <option value="g" ${unit==='g'?'selected':''}>g</option>
       <option value="ml" ${unit==='ml'?'selected':''}>ml</option>
       <option value="tbsp" ${unit==='tbsp'?'selected':''}>tbsp</option>
@@ -2190,10 +2191,12 @@ function openFoodModal(mode) {
 function addIngredientRow(name = '', amount = '', unit = 'g') {
   const row = document.createElement('div');
   row.className = 'ingredient-row';
+  // Unique-enough names to defeat Safari's "autofill from similar field" heuristic
+  const uniq = Math.random().toString(36).slice(2, 8);
   row.innerHTML = `
-    <input type="text" placeholder="ingredient" value="${escapeHtml(name)}">
-    <input type="number" placeholder="amt" inputmode="decimal" value="${amount}">
-    <select>
+    <input type="text" placeholder="ingredient" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" name="ing-${uniq}" value="${escapeHtml(name)}">
+    <input type="number" placeholder="amt" inputmode="decimal" autocomplete="off" name="amt-${uniq}" value="${amount}">
+    <select name="unit-${uniq}">
       <option value="g" ${unit==='g'?'selected':''}>g</option>
       <option value="ml" ${unit==='ml'?'selected':''}>ml</option>
       <option value="tbsp" ${unit==='tbsp'?'selected':''}>tbsp</option>
@@ -2243,7 +2246,7 @@ Estimate the total nutrition. Output JSON only.`;
       },
       body: JSON.stringify({
         model: getModel(),
-        max_tokens: 300,
+        max_tokens: 800,
         system: systemPrompt,
         messages: [
           { role: 'user', content: userPrompt },
@@ -2264,27 +2267,36 @@ Estimate the total nutrition. Output JSON only.`;
     let text = raw.replace(/```json|```/g, '').trim();
     // If we prefilled with '{', the response is missing the opening brace
     if (prefilled && !text.startsWith('{')) text = '{' + text;
-    // Find the outermost {...} block
     const firstBrace = text.indexOf('{');
-    const lastBrace = text.lastIndexOf('}');
-    if (firstBrace === -1 || lastBrace === -1 || lastBrace < firstBrace) {
-      throw new Error('No JSON object found in response');
+    if (firstBrace === -1) {
+      throw new Error('No JSON found. Got: ' + raw.slice(0, 100));
     }
-    const candidate = text.slice(firstBrace, lastBrace + 1);
-    return JSON.parse(candidate);
+    let candidate = text.slice(firstBrace);
+    // Try parsing as-is first
+    try { return JSON.parse(candidate); } catch (_) {}
+    // Truncated? Find the last closing brace
+    const lastBrace = candidate.lastIndexOf('}');
+    if (lastBrace !== -1) {
+      try { return JSON.parse(candidate.slice(0, lastBrace + 1)); } catch (_) {}
+    }
+    // Last attempt: trim trailing comma/partial value, add a closing brace
+    candidate = candidate.replace(/,\s*$/, '').replace(/:\s*[^,}]*$/, ': 0');
+    try { return JSON.parse(candidate + '}'); } catch (_) {}
+    throw new Error('Bad JSON. Got: ' + raw.slice(0, 100));
   }
 
   let parsed;
+  let lastRaw = '';
   try {
-    const raw = await callApi();
-    parsed = extractJson(raw);
+    lastRaw = await callApi();
+    parsed = extractJson(lastRaw);
   } catch (e) {
-    // Retry once with a clearer instruction
+    // Retry once
     try {
-      const raw = await callApi();
-      parsed = extractJson(raw);
+      lastRaw = await callApi();
+      parsed = extractJson(lastRaw);
     } catch (e2) {
-      throw new Error('Could not parse nutrition response. Try simplifying ingredient names (e.g. "tuna" instead of brand names) and retry.');
+      throw new Error('Could not parse: ' + (lastRaw ? lastRaw.slice(0, 120) : e2.message));
     }
   }
 
